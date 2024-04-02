@@ -7,15 +7,15 @@
 
 // reference https://ieeexplore.ieee.org/document/6787289
 // data, command line
-void initializeMeans(double X, int N, int d, int K, double mu);
-void initializeCovariances(double X, int N, int d, double sigma);
+void initializeMeans(int N, int d, int K, double X[N][d], double mu[K][d]);
+void initializeCovariances(int N, int d, double X[N][d], double sigma);
 void initializeCoefficients(int K, double alpha);
 
-void EStep(double X, int N, int d, double mu, double sigma, double alpha, int K, double H);
-void MStep0(double X, int N, int d, double H, int K, double mu, double alpha);
-void MStep1(double X, int N, int d, double H, int K, double mu, double alpha, double sigma);
-void checkConvergence(double H, int N, int K, double HPrev);
-void getLabels(double H, int N, int K, int labelIndices); // labelIndices 1xN
+void EStep(int N, int d, int K, double X[N][d], double mu[K][d], double sigma, double alpha, double H);
+void MStep0(int N, int d, int K, double X[N][d], double H, double mu[K][d], double alpha);
+void MStep1(int N, int d, int K, double X[N][d], double H, double mu[K][d], double alpha, double sigma);
+void checkConvergence(int N, int K, double H, double HPrev);
+void getLabels(int N, int K, double H, int labelIndices); // labelIndices 1xN
 // H is posterior probabuility, the output
 
 void printMatrix(int n, int m, double x[n][m]);
@@ -53,11 +53,11 @@ int main(int argc, char *argv[]){
     }
 
     //https://stackoverflow.com/questions/36890624/malloc-a-2d-array-in-c
-    double (*X)[d] = malloc(sizeof(int[N][d]));
-    double (*H)[K] = malloc(sizeof(int[N][K]));
-    double (*HPrev)[K] = malloc(sizeof(int[N][K]));
-
-    double *mu = malloc(K*sizeof(double));
+    double (*X)[d] = malloc(sizeof(double[N][d]));
+    double (*H)[K] = malloc(sizeof(double[N][K]));
+    double (*HPrev)[K] = malloc(sizeof(double[N][K]));
+    double (*mu)[d] = malloc(d*sizeof(double[K][d]));
+    
     double *sigma = malloc(K*sizeof(double));
     double *alpha = malloc(K*sizeof(double));
     double *labelIndices = malloc(N*sizeof(double));
@@ -66,15 +66,11 @@ int main(int argc, char *argv[]){
     char buffer[160];
     for (i = 0; i < N; i++){
         if (!fgets(buffer, 160, fp)) {printf("Incorrect dimensions. Something is wrong.\n"); break;}
-        // If you need all the values in a row
         char *token;
         token = strtok(buffer, ",");
             for (j = 0; j < d; j++){
-            // Just printing each integer here but handle as needed
             double n = atof(token);
-            //printf("%lf\n", n);
             X[i][j] = n;
-            //printf("%d %d %lf\n", i, j, X[i][j]);
 
             token = strtok(NULL, ",");
         }
@@ -82,7 +78,7 @@ int main(int argc, char *argv[]){
     //}
     // https://stackoverflow.com/questions/61078280/how-to-read-a-csv-file-in-c
 
-    printMatrix(N, d, X);
+    //printMatrix(N, d, X);
 
     // input in command line csv filename, input number of components, and number threads
     // also wether they want labels
@@ -93,8 +89,8 @@ int main(int argc, char *argv[]){
     // use whole dataset covariance to start (could add regularization matrix *number components)
     // use uniform mixing coefficients as 1/# cluster
 
- void initializeMeans();
-    void initializeCovariances();
+   initializeMeans(N, d, K, X, mu);
+   /* void initializeCovariances();
     void initializeCoefficients();
 
     // 2. E-Step
@@ -135,21 +131,24 @@ int main(int argc, char *argv[]){
     // 6. implement timing 
 
     // 7. generating graphs, output stuff
-    # pragma omp single 
+    # pragma omp single */
 
     return 0;
 }
 
-void initializeMeans(double X, int N, int d, int K, double mu){
-    
+void initializeMeans(int N, int d, int K, double X[N][d], double mu[K][d]){ // use random points for means
+    srand(time(NULL));
+    int index;
+    // https://stackoverflow.com/questions/1202687/how-do-i-get-a-specific-range-of-numbers-from-rand
+    for (int i = 0; i < K; i++){
+        index = rand() % N;
+        for (int j = 0; j < d; j++){
+            mu[i][j] = X[index][j];
+            //printf("%lf %d ", mu[i][j], index);
+        }
+        //printf("\n");
+    }
 }
-void initializeCovariances(double X, int N, int d, double sigma);
-void initializeCoefficients(int K, double alpha);
-void EStep(double X, int N, int d, double mu, double sigma, double alpha, int K, double H);
-void MStep0(double X, int N, int d, double H, int K, double mu, double alpha);
-void MStep1(double X, int N, int d, double H, int K, double mu, double alpha, double sigma);
-void checkConvergence(double H, int N, int K, double HPrev);
-void getLabels(double H, int N, int K, int labelIndices);
 
 void printMatrix(int n, int m, double x[n][m]){ // prints solution vector
     for (int i = 0; i < n; i++){
