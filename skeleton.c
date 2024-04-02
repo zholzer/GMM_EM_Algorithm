@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h> 
 #include <math.h>
 #include <time.h>
 #include <omp.h>
@@ -34,17 +35,22 @@ int main(int argc, char *argv[]){
 
     FILE *fp = fopen(fileName,"r");
     // https://stackoverflow.com/questions/12733105/c-function-that-counts-lines-in-file
-   /* char ch;
+   char ch;
     while(!feof(fp)){
     ch = fgetc(fp);
         if(ch == '\n'){
             N++;
         }
-        if(ch == ' '){
+    } 
+    // https://www.programiz.com/c-programming/examples/read-file
+    rewind(fp);
+    while(!feof(fp)){
+        if(ch == '\n'){break;}
+        ch = fgetc(fp);
+        if(ch == ','){
             d++;
         }
-    } */
-    //printf('%d\n',N);
+    }
 
     //https://stackoverflow.com/questions/36890624/malloc-a-2d-array-in-c
     double (*X)[d] = malloc(sizeof(int[N][d]));
@@ -56,17 +62,25 @@ int main(int argc, char *argv[]){
     double *alpha = malloc(K*sizeof(double));
     double *labelIndices = malloc(N*sizeof(double));
 
-    N = 500;
-    d = 2;
     rewind(fp);
-    // real matrix
-    for (i=0; i<N; i++){
-        for (j=0; j<d; j++){
-            fscanf(fp, "%lf", &index);
-            X[i][j] = index;
-            if(feof(fp)){break;}
+    char buffer[160];
+    for (i = 0; i < N; i++){
+        if (!fgets(buffer, 160, fp)) {printf("Incorrect dimensions. Something is wrong.\n"); break;}
+        // If you need all the values in a row
+        char *token;
+        token = strtok(buffer, ",");
+            for (j = 0; j < d; j++){
+            // Just printing each integer here but handle as needed
+            double n = atof(token);
+            //printf("%lf\n", n);
+            X[i][j] = n;
+            //printf("%d %d %lf\n", i, j, X[i][j]);
+
+            token = strtok(NULL, ",");
         }
     }
+    //}
+    // https://stackoverflow.com/questions/61078280/how-to-read-a-csv-file-in-c
 
     printMatrix(N, d, X);
 
@@ -79,7 +93,7 @@ int main(int argc, char *argv[]){
     // use whole dataset covariance to start (could add regularization matrix *number components)
     // use uniform mixing coefficients as 1/# cluster
 
-/* void initializeMeans();
+ void initializeMeans();
     void initializeCovariances();
     void initializeCoefficients();
 
@@ -121,7 +135,7 @@ int main(int argc, char *argv[]){
     // 6. implement timing 
 
     // 7. generating graphs, output stuff
-    # pragma omp single */
+    # pragma omp single 
 
     return 0;
 }
@@ -140,7 +154,7 @@ void getLabels(double H, int N, int K, int labelIndices);
 void printMatrix(int n, int m, double x[n][m]){ // prints solution vector
     for (int i = 0; i < n; i++){
         for (int j = 0; j < m; j++){
-        printf("%lf", x[i][j]);
+        printf("%lf ", x[i][j]);
         }
         printf("\n");
     }
