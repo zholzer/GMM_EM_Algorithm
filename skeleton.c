@@ -7,9 +7,10 @@
 
 // reference https://ieeexplore.ieee.org/document/6787289
 // data, command line
-void initializeMeans(int N, int d, int K, double X[N][d], double *meanVector,double mu[K][d]);
-void findMeanVector(int N, int d, double X[N][d], double *meanVector);
-void initializeCovariances(int N, int d, double X[N][d], int K, double *meanVector, double (*sigma)[d][d]);
+double* findMeanVector(int num_vectors, int d, double vector_matrix[num_vectors][d]);
+
+void initializeMeans(int N, int d, int K, double X[N][d], double mu[K][d]);
+void initializeCovariances(int N, int d, double X[N][d], int K, double (*sigma)[d][d]);
 void initializeCoefficients(int K, double *alpha);
 
 void EStep(int N, int d, int K, double X[N][d], double mu[K][d], double sigma[d][d], double alpha, double H);
@@ -74,7 +75,6 @@ int main(int argc, char *argv[])
     double(*sigma)[d][d] = malloc(K * sizeof(double[d][d]));   // K number of matrices that are of size dxd
 
     double *alpha = malloc(K * sizeof(double));
-    double *meanVector = malloc(d * sizeof(double));
     double *labelIndices = malloc(N * sizeof(double));
 
     // https://stackoverflow.com/questions/61078280/how-to-read-a-csv-file-in-c
@@ -109,9 +109,9 @@ int main(int argc, char *argv[])
     // use whole dataset covariance to start (could add regularization matrix *number components)
     // use uniform mixing coefficients as 1/# cluster
 
-    findMeanVector(N, d, X, meanVector);  // modifies the meanVector array in place. Input to initializeMeans and initializeCovariances.
 
-    initializeMeans(N, d, K, X, meanVector, mu);
+
+    initializeMeans(N, d, K, X, mu);
     // print the values of the initial means
     printf("initial means: \n");
     for (int i = 0; i < K; i++)
@@ -130,7 +130,7 @@ int main(int argc, char *argv[])
     //     printf("%lf\n", alpha[i]);
     // }
 
-    initializeCovariances(N, d, X, K, meanVector, sigma);
+    initializeCovariances(N, d, X, K, sigma);
     // print debugging
     for (int k = 0; k < K; k++){
         printf("covariance matrix %d: \n", k);
@@ -191,7 +191,6 @@ int main(int argc, char *argv[])
     free(H);
     free(HPrev);
     free(labelIndices);
-    free(meanVector);
 
     return 0;
 }
@@ -209,25 +208,33 @@ void printMatrix(int n, int m, double x[n][m])
     }
 }
 
-// find the mean vector for all the inputs by arithmetic mean for each dimension. Used by initializeMeans and initializeCovariances.
-void findMeanVector(int N, int d, double X[N][d], double *meanVector)
+// find the mean vector for all the inputs by arithmetic mean for each dimension. Outputs a 1xd array (pointer to it)
+double* findMeanVector(int num_vectors, int d, double vector_matrix[num_vectors][d])
 {
-    for (int i = 0; i < d; i++)
+    // allocate memory for the meanVector array of size 1xd that will be returned
+    double *meanVector = (double*)calloc(d,sizeof(double));
+
+    for (int dim = 0; dim < d; dim++)
     {
         double sum = 0;
-        for (int j = 0; j < N; j++)
+        for (int i = 0; i < num_vectors; i++)
         {
-            sum += X[j][i];
+            sum += vector_matrix[i][dim];
         }
-        meanVector[i] = sum / N;
+        meanVector[dim] = sum / num_vectors;
         // print debugging
         // printf("%i: %lf \n", i, meanVector[i]);
     }
+
+    return meanVector;  // return pointer to the meanVector array
 }
 
 // initialize means by small perturbations about the mean vector
-void initializeMeans(int N, int d, int K, double X[N][d], double *meanVector,double mu[K][d])
+void initializeMeans(int N, int d, int K, double X[N][d], double mu[K][d])
 {
+    // calculate the meanVector of the full dataset
+    double *meanVector = findMeanVector(N, d, X);
+
     // add small perturbations about the mean vector
     srand(time(NULL));
     double pert_scale = 0.1 * meanVector[0]; // set the scale of the perturbations to be 10% of the first element of the mean vector
@@ -241,6 +248,9 @@ void initializeMeans(int N, int d, int K, double X[N][d], double *meanVector,dou
             // printf("%i: %lf \n", i, mu[i][j]);
         }
     }
+
+    // free memory for meanVector
+    free(meanVector);
 }
 
 void initializeCoefficients(int K, double *alpha)
@@ -253,8 +263,11 @@ void initializeCoefficients(int K, double *alpha)
     }
 }
 
-void initializeCovariances(int N, int d, double X[N][d], int K, double *meanVector, double (*sigma)[d][d])
+void initializeCovariances(int N, int d, double X[N][d], int K, double (*sigma)[d][d])
 {
+    // calculate the meanVector of the full dataset
+    double *meanVector = findMeanVector(N, d, X);
+
     // initialize the covariance matrix
     double cov_matrix[d][d];
     // fill in the diagonals with the variances
@@ -292,5 +305,8 @@ void initializeCovariances(int N, int d, double X[N][d], int K, double *meanVect
             }
         }
     }
+
+    // free memory for meanVector
+    free(meanVector);
 
 }
