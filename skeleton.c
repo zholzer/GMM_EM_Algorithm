@@ -17,13 +17,16 @@ void gaussJordan(int n, double matrix[n][n], double inverse[n][n]);
 double pdf(int d, double sigma_m[d][d], double mu_m[d], double x_i[d]);
 
 void EStep(int d, int K, double x_i[d], double mu[K][d], double (*sigma)[d][d], double alpha[K], double H_i[K]);
-void MStep0(int N, int d, int K, double X[N][d], double H, double mu[K][d], double *alpha);
-void MStep1(int N, int d, int K, double X[N][d], double H, double mu[K][d], double *alpha, double (*sigma)[d][d]);
-void checkConvergence(int N, int K, double H, double HPrev);
+void MStep(int N, int d, int K, double X[N][d], double H[N][K], double mu[K][d], double alpha[K], double (*sigma)[d][d]);
+void checkConvergence(int N, int K, double H[N][K], double alpha[K]);
 void getLabels(int N, int K, double H, int labelIndices); // labelIndices 1xN
 // H is posterior probabuility, the output
 
 void printMatrix(int n, int m, double x[n][m]);
+
+double logLI = 0.0, logLIPrev = 0.0;
+double epsilon = 0.01;
+int maxIter = 1000, flag = 0;
 
 int main(int argc, char *argv[])
 {
@@ -31,7 +34,7 @@ int main(int argc, char *argv[])
 
     //////// 1a. initialize variables, read in file, allocate memory ////////
     int N = 0, d = 1, K, thread_count, i, j; // initialize
-    double index;
+    
 
     // Read in command line inputs. csv file name, number of components, number of threads
     // also whether they want labels 
@@ -147,44 +150,54 @@ int main(int argc, char *argv[])
         printf("\n");
     }
 
-    //////// 2. E-Step ////////
-
     omp_set_num_threads(thread_count);
-    # pragma omp parallel for
-    for (int row = 0; row < N; row++){
-        // compute values for each row
-        EStep(d, K, X[row], mu, sigma, alpha, H[row]);
+    for (int iter = 1; iter <= maxIter; iter++){
+        //////// 2. E-Step ////////
+    // # pragma omp parallel for
+        for (int row = 0; row < N; row++){
+            // compute values for each row
+            EStep(d, K, X[row], mu, sigma, alpha, H[row]);
+        }
+        // print debugging
+        //printf("E-Step: \n");
+    // printMatrix(N, K, H);
+
+
+        // 3. M-Step
+            // compute values for each row
+        //printMatrix(K, d, mu);
+        MStep(N, d, K, X, H, mu, alpha, sigma);
+        //printMatrix(K, d, mu);
+        /*for (int k = 0; k < K; k++){
+            printf("covariance matrix %d: \n", k);
+            for (int i = 0; i < d; i++){
+                for (int j = 0; j < d; j++){
+                    printf("%.4f\t", sigma[k][i][j]);
+                }
+                printf("\n");
+            }
+            printf("\n");
+        }*/
+
+        // 4. check for convergence; iteration number and epsilon
+        if (iter == maxIter){
+            printf("Maximum iteration of %d reached. No convergence.\n", maxIter); 
+            return 0;
+        }
+        checkConvergence(N, K, H, alpha);
+        if (flag == 1){
+        printf("Converged at iteration %d.\n", iter);
+        break;
+        }
     }
-    // print debugging
-    printf("E-Step: \n");
-    printMatrix(N, K, H);
-
-
-    /* 3. M-Step
-    void MStep0();
-    //  a. create temp vectors
-
-    //  b. parallelize with partial sums
-
-    //  c. calculate alpha and mu
-
-    void MStep1(); // yellow part becomes alpha*N
-    //  d. create temp vector
-
-    //  e. parallelize with partial sums
-
-    //  f. calculate sigma
-
-    // 4. check for convergence; iteration number and epsilon
-    void checkConvergence();
-
+    printf("Yay!\n");
     // 5. get labels using maximum probabuility of feature vector among components (optional)
-    void getLabels(); // index+1 of maximum of each row
+    //void getLabels(); // index+1 of maximum of each row
 
     // 6. implement timing
 
     // 7. generating graphs, output stuff
-    # pragma omp single */
+    //# pragma omp single */
 
     // free memory
     free(alpha);
@@ -199,10 +212,9 @@ int main(int argc, char *argv[])
     return 0;
 }
 
-void printMatrix(int n, int m, double x[n][m])
-{
-    for (int i = 0; i < n; i++)
-    {
+void printMatrix(int n, int m, double x[n][m]){
+    for (int i = 0; i < n; i++){
+        printf("%d, ", i);
         for (int j = 0; j < m; j++)
         {
             printf("%lf ", x[i][j]);
@@ -228,8 +240,7 @@ void findMeanVector(int N, int d, double X[N][d], double *meanVector)
 }
 
 // initialize means by small perturbations about the mean vector
-void initializeMeans(int N, int d, int K, double X[N][d], double *meanVector,double mu[K][d])
-{
+void initializeMeans(int N, int d, int K, double X[N][d], double *meanVector,double mu[K][d]){
     // add small perturbations about the mean vector
     srand(time(NULL));
     double pert_scale = 0.1 * meanVector[0]; // set the scale of the perturbations to be 10% of the first element of the mean vector
@@ -267,7 +278,7 @@ void initializeCovariances(int N, int d, double X[N][d], int K, double *meanVect
         {
             sum_sq_diff += (X[j][dim] - meanVector[dim]) * (X[j][dim] - meanVector[dim]);
         }
-        cov_matrix[dim][dim] = sum_sq_diff / (N-1);
+        cov_matrix[dim][dim] = sum_sq_diff / ((double) N-1.0);
     }
 
     // fill in the off-diagonals with the covariances
@@ -281,8 +292,8 @@ void initializeCovariances(int N, int d, double X[N][d], int K, double *meanVect
                 sum_product += (X[k][i] - meanVector[i]) * (X[k][j] - meanVector[j]);
             }
             // fill in the upper and lower triangle with the covariance
-            cov_matrix[i][j] = sum_product / (N-1);
-            cov_matrix[j][i] = sum_product / (N-1);
+            cov_matrix[i][j] = sum_product / (N-1.0);
+            cov_matrix[j][i] = sum_product / (N-1.0);
         }
     }
 
@@ -304,7 +315,7 @@ void initializeCovariances(int N, int d, double X[N][d], int K, double *meanVect
 // modified from https://stackoverflow.com/questions/41384020/c-program-to-calculate-the-determinant-of-a-nxn-matrix
 double find_determinant(int n, double sigma_m[n][n]) {
     int i, j, k, factor = 1;
-    double det = 0;
+    double det = 0.0;
     double newm[n - 1][n - 1];
 
     // Base case: when matrix is a single element
@@ -371,7 +382,7 @@ void gaussJordan(int n, double matrix[n][n], double inverse[n][n]) {
 
 double pdf(int d, double sigma_m[d][d], double mu_m[d], double x_i[d]) {
     double det = find_determinant(d, sigma_m);
-    double part_1 = 1 / ( pow(2 * M_PI, d / 2.0) * sqrt(det));
+    double part_1 = 1.0 / ( pow(2.0 * M_PI, d / 2.0) * sqrt(det));
 
     // (x_i - mu_m)
     double diff[d];
@@ -405,6 +416,7 @@ double pdf(int d, double sigma_m[d][d], double mu_m[d], double x_i[d]) {
 
 // input is a row vector (1xd), output is a row of component probabilities (1xK) for that row vector
 void EStep(int d, int K, double x_i[d], double mu[K][d], double (*sigma)[d][d], double alpha[K], double H_i[K]){
+    
     for (int m = 0; m < K; m++) {
         double numerator = alpha[m] * pdf(d, sigma[m], mu[m], x_i);
         double denominator = 0.0;
@@ -412,7 +424,59 @@ void EStep(int d, int K, double x_i[d], double mu[K][d], double (*sigma)[d][d], 
             denominator += alpha[k] * pdf(d, sigma[k], mu[k], x_i);
         }
         H_i[m] = numerator / denominator;
-
+        //printf("%f %f %f %d \n", numerator, denominator, H_i[m], omp_get_thread_num ( ), m);
     }
 
+}
+
+void MStep(int N, int d, int K, double X[N][d], double H[N][K], double mu[K][d], double alpha[K], double (*sigma)[d][d]){
+    double vi, numerator;
+    double *wi = calloc(K, sizeof(double));
+    // calculate sum of H over N at each k
+    for (int k = 0; k < K; k++){
+        # pragma omp parallel for reduction(+: wi[k])
+            for (int i = 0; i < N; i++){
+                wi[k] += H[i][k];
+            }
+    }
+    for (int k = 0; k < K; k++){
+        for (int j = 0; j < d; j++){
+            // calculate sum of H*x over N at each k
+            vi = 0.0;
+            # pragma omp parallel for reduction(+: vi)
+            for (int i = 0; i < N; i++){
+                vi += H[i][k]*X[i][j];
+            }
+            mu[k][j] = vi/wi[k]; // update mu at each k and d
+        }
+        alpha[k] = (1.0/(double) N)*wi[k]; // update alpha
+    }
+
+    for (int k = 0; k < K; k++){
+        for (int j0 = 0; j0 < d; j0++){
+            for (int j1 = 0; j1 < d; j1++){
+                # pragma omp parallel for reduction(+: sigma[k][j0][j1])
+                for (int i = 0; i < N; i++){
+                    // update sigma at each k
+                    sigma[k][j0][j1] += H[i][k]*(X[i][j0] - mu[k][j0])*(X[i][j1] - mu[k][j1])/wi[k];
+                }
+            }
+        }
+    }
+    free(wi);
+}
+
+void checkConvergence(int N, int K, double H[N][K], double alpha[K]){
+    double *LI = calloc(N, sizeof(double));
+    for (int i = 0; i < N; i++){
+        for (int k = 0; k < K; k++){
+            LI[i] += alpha[k]*H[i][k]; // get likelihood at each N
+        }
+        logLI += log(LI[i]); // take log-likelihood of array
+    }
+    if ((logLI - logLIPrev)/logLI < epsilon){ // check convergence
+        printf("It converged with log-likelihood %f.\n", logLI);
+        flag = 1; // if true tell main
+    }
+    else{logLIPrev = logLI;} // if false prev value is updated
 }
