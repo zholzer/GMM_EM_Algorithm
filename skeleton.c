@@ -151,7 +151,7 @@ int main(int argc, char *argv[])
     }
 
     omp_set_num_threads(thread_count);
-    //for (int iter = 1; iter <= maxIter; iter++){
+    for (int iter = 1; iter <= maxIter; iter++){
         //////// 2. E-Step ////////
     # pragma omp parallel for
         for (int row = 0; row < N; row++){
@@ -160,7 +160,7 @@ int main(int argc, char *argv[])
         }
         // print debugging
         //printf("E-Step: \n");
-    printMatrix(N, K, H);
+    //printMatrix(N, K, H);
 
 
         // 3. M-Step
@@ -180,7 +180,7 @@ int main(int argc, char *argv[])
         }*/
 
         // 4. check for convergence; iteration number and epsilon
-  /*      if (iter == maxIter){
+        if (iter == maxIter){
             printf("Maximum iteration of %d reached. No convergence.\n", maxIter); 
             return 0;
         }
@@ -190,7 +190,7 @@ int main(int argc, char *argv[])
         break;
         }
     }
-    printf("Yay!\n"); */
+    printf("Yay!\n"); 
     // 5. get labels using maximum probabuility of feature vector among components (optional)
     //void getLabels(); // index+1 of maximum of each row
 
@@ -485,3 +485,4 @@ void checkConvergence(int N, int K, double H[N][K], double alpha[K]){
     }
     else{logLIPrev = logLI;} // if false prev value is updated
 }
+//void getLabels(int N, int K, double H, int labelIndices){}
