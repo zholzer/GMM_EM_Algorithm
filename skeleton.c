@@ -19,7 +19,7 @@ double pdf(int d, double sigma_m[d][d], double mu_m[d], double x_i[d]);
 void EStep(int d, int K, double x_i[d], double mu[K][d], double (*sigma)[d][d], double alpha[K], double H_i[K]);
 void MStep(int N, int d, int K, double X[N][d], double H[N][K], double mu[K][d], double alpha[K], double (*sigma)[d][d]);
 void checkConvergence(int N, int K, double H[N][K], double alpha[K]);
-void getLabels(int N, int K, double H, int labelIndices); // labelIndices 1xN
+void getLabels(int N, int K, double H[N][K]); // labelIndices 1xN
 // H is posterior probabuility, the output
 
 void printMatrix(int n, int m, double x[n][m]);
@@ -139,7 +139,7 @@ int main(int argc, char *argv[])
 
     initializeCovariances(N, d, X, K, meanVector, sigma);
     // print debugging
-    for (int k = 0; k < K; k++){
+    /*for (int k = 0; k < K; k++){
         printf("covariance matrix %d: \n", k);
         for (int i = 0; i < d; i++){
             for (int j = 0; j < d; j++){
@@ -148,7 +148,7 @@ int main(int argc, char *argv[])
             printf("\n");
         }
         printf("\n");
-    }
+    }*/
 
     omp_set_num_threads(thread_count);
     for (int iter = 1; iter <= maxIter; iter++){
@@ -190,10 +190,11 @@ int main(int argc, char *argv[])
         break;
         }
     }
-    printf("Yay!\n"); 
+
     // 5. get labels using maximum probabuility of feature vector among components (optional)
     //void getLabels(); // index+1 of maximum of each row
-
+    //printMatrix(N, K, H);
+    getLabels(N, K, H);
     // 6. implement timing
 
     // 7. generating graphs, output stuff
@@ -485,4 +486,18 @@ void checkConvergence(int N, int K, double H[N][K], double alpha[K]){
     }
     else{logLIPrev = logLI;} // if false prev value is updated
 }
-//void getLabels(int N, int K, double H, int labelIndices){}
+
+void getLabels(int N, int K, double H[N][K]){
+    FILE *fpo;
+    fpo = fopen("labels.txt", "w");
+    int maxIndex;
+    for (int i = 0; i < N; i++){
+        maxIndex = 0;
+        for (int k = 1; k < K; k++){
+            if (H[i][k] > H[i][maxIndex]){
+                maxIndex = k;
+            }
+        }
+        fprintf(fpo, "%d\n", maxIndex);
+    }
+}
