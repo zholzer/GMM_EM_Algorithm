@@ -151,16 +151,16 @@ int main(int argc, char *argv[])
     }
 
     omp_set_num_threads(thread_count);
-    for (int iter = 1; iter <= maxIter; iter++){
+    //for (int iter = 1; iter <= maxIter; iter++){
         //////// 2. E-Step ////////
-    // # pragma omp parallel for
+    # pragma omp parallel for
         for (int row = 0; row < N; row++){
             // compute values for each row
             EStep(d, K, X[row], mu, sigma, alpha, H[row]);
         }
         // print debugging
         //printf("E-Step: \n");
-    // printMatrix(N, K, H);
+    printMatrix(N, K, H);
 
 
         // 3. M-Step
@@ -180,7 +180,7 @@ int main(int argc, char *argv[])
         }*/
 
         // 4. check for convergence; iteration number and epsilon
-        if (iter == maxIter){
+  /*      if (iter == maxIter){
             printf("Maximum iteration of %d reached. No convergence.\n", maxIter); 
             return 0;
         }
@@ -190,7 +190,7 @@ int main(int argc, char *argv[])
         break;
         }
     }
-    printf("Yay!\n");
+    printf("Yay!\n"); */
     // 5. get labels using maximum probabuility of feature vector among components (optional)
     //void getLabels(); // index+1 of maximum of each row
 
@@ -213,12 +213,16 @@ int main(int argc, char *argv[])
 }
 
 void printMatrix(int n, int m, double x[n][m]){
+    double sum;
     for (int i = 0; i < n; i++){
+        sum = 0.0;
         printf("%d, ", i);
         for (int j = 0; j < m; j++)
         {
             printf("%lf ", x[i][j]);
+            sum += x[i][j];
         }
+        //if(sum < .99){printf("Something wrong.");}
         printf("\n");
     }
 }
@@ -340,11 +344,12 @@ double find_determinant(int n, double sigma_m[n][n]) {
 
 void gaussJordan(int n, double matrix[n][n], double inverse[n][n]) {
     double temp;
-    double identity[n][n];
+    double identity[n][n], tempMatrix[n][n];
 
-    // Initialize identity matrix
+    // Initialize identity matrix and temporary matrix
     for (int i = 0; i < n; i++) {
         for (int j = 0; j < n; j++) {
+            tempMatrix[i][j] = matrix[i][j];
             if (i == j)
                 identity[i][j] = 1.0;
             else
@@ -354,16 +359,16 @@ void gaussJordan(int n, double matrix[n][n], double inverse[n][n]) {
 
     // Applying Gauss-Jordan elimination
     for (int i = 0; i < n; i++) {
-        temp = matrix[i][i];
+        temp = tempMatrix[i][i];
         for (int j = 0; j < n; j++) {
-            matrix[i][j] /= temp;
+            tempMatrix[i][j] /= temp;
             identity[i][j] /= temp;
         }
         for (int k = 0; k < n; k++) {
             if (k != i) {
-                temp = matrix[k][i];
+                temp = tempMatrix[k][i];
                 for (int j = 0; j < n; j++) {
-                    matrix[k][j] -= matrix[i][j] * temp;
+                    tempMatrix[k][j] -= tempMatrix[i][j] * temp;
                     identity[k][j] -= identity[i][j] * temp;
                 }
             }
@@ -391,7 +396,7 @@ double pdf(int d, double sigma_m[d][d], double mu_m[d], double x_i[d]) {
     }
 
     // initialize the inverse matrix, then fill the inverse matrix with the gaussJordan function to get the inverse of sigma_m
-    double inverse_sigma[d][d];
+    double inverse_sigma[d][d]; 
     gaussJordan(d, sigma_m, inverse_sigma);
 
     // matrix vector multiplication. initialize result vector
@@ -430,7 +435,7 @@ void EStep(int d, int K, double x_i[d], double mu[K][d], double (*sigma)[d][d], 
 }
 
 void MStep(int N, int d, int K, double X[N][d], double H[N][K], double mu[K][d], double alpha[K], double (*sigma)[d][d]){
-    double vi, numerator;
+    double vi;
     double *wi = calloc(K, sizeof(double));
     // calculate sum of H over N at each k
     for (int k = 0; k < K; k++){
