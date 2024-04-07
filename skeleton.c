@@ -347,10 +347,12 @@ void gaussJordan(int n, double matrix[n][n], double inverse[n][n]) {
     double temp;
     double identity[n][n], tempMatrix[n][n];
 
-    // Initialize identity matrix and temporary matrix
+    // make a local tempMatrix copy of the input matrix. Otherwise the input matrix will become an identity matrix over the course of gaussJordan
+    memcpy(tempMatrix, matrix, sizeof(matrix);
+
+    // Initialize identity matrix
     for (int i = 0; i < n; i++) {
         for (int j = 0; j < n; j++) {
-            tempMatrix[i][j] = matrix[i][j];
             if (i == j)
                 identity[i][j] = 1.0;
             else
