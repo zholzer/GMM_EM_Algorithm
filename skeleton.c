@@ -139,7 +139,7 @@ int main(int argc, char *argv[])
 
     initializeCovariances(N, d, X, K, meanVector, sigma);
     // print debugging
-    /*for (int k = 0; k < K; k++){
+    for (int k = 0; k < K; k++){
         printf("covariance matrix %d: \n", k);
         for (int i = 0; i < d; i++){
             for (int j = 0; j < d; j++){
@@ -148,7 +148,7 @@ int main(int argc, char *argv[])
             printf("\n");
         }
         printf("\n");
-    }*/
+    }
 
     omp_set_num_threads(thread_count);
     for (int iter = 1; iter <= maxIter; iter++){
@@ -177,7 +177,7 @@ int main(int argc, char *argv[])
                 printf("\n");
             }
             printf("\n");
-        }*/
+        } */
 
         // 4. check for convergence; iteration number and epsilon
         if (iter == maxIter){
@@ -438,7 +438,7 @@ void EStep(int d, int K, double x_i[d], double mu[K][d], double (*sigma)[d][d], 
 }
 
 void MStep(int N, int d, int K, double X[N][d], double H[N][K], double mu[K][d], double alpha[K], double (*sigma)[d][d]){
-    double vi;
+    double vi, sum;
     double *wi = calloc(K, sizeof(double));
     // calculate sum of H over N at each k
     for (int k = 0; k < K; k++){
@@ -461,13 +461,13 @@ void MStep(int N, int d, int K, double X[N][d], double H[N][K], double mu[K][d],
     }
 
     for (int k = 0; k < K; k++){
-        for (int j0 = 0; j0 < d; j0++){
-            for (int j1 = 0; j1 < d; j1++){
-                # pragma omp parallel for reduction(+: sigma[k][j0][j1])
-                for (int i = 0; i < N; i++){
-                    // update sigma at each k
-                    sigma[k][j0][j1] += H[i][k]*(X[i][j0] - mu[k][j0])*(X[i][j1] - mu[k][j1])/wi[k];
+        for (int j0 = 0; j0 < d; j0++) {
+            for (int j1 = 0; j1 < d; j1++) {
+                sum = 0.0;
+                for (int i = 0; i < N; i++) {
+                    sum  += H[i][k] * (X[i][j0] - mu[k][j0]) * (X[i][j1] - mu[k][j1]);
                 }
+                sigma[k][j0][j1] = sum/wi[k];
             }
         }
     }
