@@ -195,6 +195,7 @@ int main(int argc, char *argv[])
     //void getLabels(); // index+1 of maximum of each row
     //printMatrix(N, K, H);
     getLabels(N, K, H);
+    printMatrix(K, d, mu);
     // 6. implement timing
 
     // 7. generating graphs, output stuff
@@ -464,6 +465,7 @@ void MStep(int N, int d, int K, double X[N][d], double H[N][K], double mu[K][d],
         for (int j0 = 0; j0 < d; j0++) {
             for (int j1 = 0; j1 < d; j1++) {
                 sum = 0.0;
+                # pragma omp parallel for reduction(+: sum)
                 for (int i = 0; i < N; i++) {
                     sum  += H[i][k] * (X[i][j0] - mu[k][j0]) * (X[i][j1] - mu[k][j1]);
                 }
