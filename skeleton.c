@@ -19,10 +19,11 @@ double pdf(int d, double sigma_m[d][d], double mu_m[d], double x_i[d]);
 void EStep(int d, int K, double x_i[d], double mu[K][d], double (*sigma)[d][d], double alpha[K], double H_i[K]);
 void MStep(int N, int d, int K, double X[N][d], double H[N][K], double mu[K][d], double alpha[K], double (*sigma)[d][d]);
 void checkConvergence(int N, int K, double H[N][K], double alpha[K]);
-void getLabels(int N, int K, double H[N][K]); // labelIndices 1xN
+int* getLabels(int N, int K, double H[N][K]); // labelIndices 1xN
 // H is posterior probabuility, the output
 
 void printMatrix(int n, int m, double x[n][m]);
+void plotPoints(const char *filename, int N, int d, int K, double points[N][d], double H[N][K], double mu[K][d], int iter);
 
 double logLI = 0.0, logLIPrev = 0.0;
 double epsilon = 0.01;
@@ -139,7 +140,7 @@ int main(int argc, char *argv[])
 
     initializeCovariances(N, d, X, K, meanVector, sigma);
     // print debugging
-    for (int k = 0; k < K; k++){
+    /*for (int k = 0; k < K; k++){
         printf("covariance matrix %d: \n", k);
         for (int i = 0; i < d; i++){
             for (int j = 0; j < d; j++){
@@ -148,10 +149,26 @@ int main(int argc, char *argv[])
             printf("\n");
         }
         printf("\n");
-    }
+    }*/
 
     omp_set_num_threads(thread_count);
+
     for (int iter = 1; iter <= maxIter; iter++){
+
+        if ((iter -1) % 10 == 0)
+        {
+            printf("iteration %d\n", iter - 1);
+            //printMatrix(N, K, H);
+            // printf("mu matrix:\n");
+            // printMatrix(K, d, mu);
+            plotPoints("plot.dat", N, d, K, X, H, mu, iter - 1);
+            // printf("alpha vector: \n");
+            // for (int i = 0; i < K; i++){
+            //     printf("%lf\n", alpha[i]);
+            // }
+
+        }
+
         //////// 2. E-Step ////////
     # pragma omp parallel for
         for (int row = 0; row < N; row++){
@@ -160,7 +177,7 @@ int main(int argc, char *argv[])
         }
         // print debugging
         //printf("E-Step: \n");
-    //printMatrix(N, K, H);
+        //printMatrix(N, K, H);
 
 
         // 3. M-Step
@@ -177,7 +194,7 @@ int main(int argc, char *argv[])
                 printf("\n");
             }
             printf("\n");
-        } */
+        }*/
 
         // 4. check for convergence; iteration number and epsilon
         if (iter == maxIter){
@@ -194,8 +211,13 @@ int main(int argc, char *argv[])
     // 5. get labels using maximum probabuility of feature vector among components (optional)
     //void getLabels(); // index+1 of maximum of each row
     //printMatrix(N, K, H);
-    getLabels(N, K, H);
-    printMatrix(K, d, mu);
+    int *labels = getLabels(N, K, H);
+
+    // try plotting with gnuplot
+    // if (d == 2){
+    //     plotPoints("plot.dat", N, d, K, X, H, mu, iter - 1);
+    // }
+
     // 6. implement timing
 
     // 7. generating graphs, output stuff
@@ -210,6 +232,7 @@ int main(int argc, char *argv[])
     free(HPrev);
     free(labelIndices);
     free(meanVector);
+    free(labels);
 
     return 0;
 }
@@ -218,7 +241,7 @@ void printMatrix(int n, int m, double x[n][m]){
     double sum;
     for (int i = 0; i < n; i++){
         sum = 0.0;
-        printf("%d, ", i);
+        printf("%3d: ", i);
         for (int j = 0; j < m; j++)
         {
             printf("%lf ", x[i][j]);
@@ -462,12 +485,12 @@ void MStep(int N, int d, int K, double X[N][d], double H[N][K], double mu[K][d],
     }
 
     for (int k = 0; k < K; k++){
-        for (int j0 = 0; j0 < d; j0++) {
-            for (int j1 = 0; j1 < d; j1++) {
+        for (int j0 = 0; j0 < d; j0++){
+            for (int j1 = 0; j1 < d; j1++){
                 sum = 0.0;
                 # pragma omp parallel for reduction(+: sum)
-                for (int i = 0; i < N; i++) {
-                    sum  += H[i][k] * (X[i][j0] - mu[k][j0]) * (X[i][j1] - mu[k][j1]);
+                for (int i = 0; i < N; i++){
+                    sum += H[i][k] * (X[i][j0] - mu[k][j0]) * (X[i][j1] - mu[k][j1]);
                 }
                 sigma[k][j0][j1] = sum/wi[k];
             }
@@ -491,17 +514,84 @@ void checkConvergence(int N, int K, double H[N][K], double alpha[K]){
     else{logLIPrev = logLI;} // if false prev value is updated
 }
 
-void getLabels(int N, int K, double H[N][K]){
+int* getLabels(int N, int K, double H[N][K]){
+    int *labelIndices = calloc(N, sizeof(int));
     FILE *fpo;
     fpo = fopen("labels.txt", "w");
-    int maxIndex;
     for (int i = 0; i < N; i++){
-        maxIndex = 0;
+        int maxIndex = 0;
+        double maxVal = H[i][0];
         for (int k = 1; k < K; k++){
-            if (H[i][k] > H[i][maxIndex]){
+            if (H[i][k] > maxVal){
+                maxVal = H[i][k];
                 maxIndex = k;
             }
         }
-        fprintf(fpo, "%d\n", maxIndex);
+        fprintf(fpo, "%d\n", maxIndex); //save to the txt file
+        labelIndices[i] = maxIndex;  // save to array
     }
+    return labelIndices; // output the array
+}
+
+void plotPoints(const char *filename, int N, int d, int K, double points[N][d], double H[N][K], double mu[K][d], int iter) {
+    FILE *fp = fopen(filename, "w");
+    if (fp == NULL) {
+        perror("Error opening file");
+        return;
+    }
+
+    // initialize colors array andfind the label indices from H array
+    int *colors = calloc(N, sizeof(int));
+    for (int i = 0; i < N; i++){
+        int maxIndex = 0;
+        double maxVal = H[i][0];
+        for (int k = 1; k < K; k++){
+            if (H[i][k] > maxVal){
+                maxVal = H[i][k];
+                maxIndex = k;
+            }
+        }
+        colors[i] = maxIndex;  // save to array
+    }
+
+    // Write the data points to a temporary file
+    for (int i = 0; i < N; i++) {
+        fprintf(fp, "%f %f %d\n", points[i][0], points[i][1], colors[i]);
+    }
+
+    // write the mean vectors to the same file with a different color index
+    for (int i = 0; i < K; i++) {
+        fprintf(fp, "%f %f %d\n", mu[i][0], mu[i][1], i); // Offset color index for marker points
+    }
+
+    fclose(fp);
+
+    // Plot using gnuplot
+    FILE *gnuplotPipe = popen("gnuplot -persist", "w");
+    if (gnuplotPipe == NULL) {
+        perror("Error opening pipe to gnuplot");
+        return;
+    }
+
+    // fprintf(gnuplotPipe, "set terminal qt font 'Arial,12'\n"); // for printing to screen
+    fprintf(gnuplotPipe, "set terminal pngcairo\n"); // for saving plots as images
+    fprintf(gnuplotPipe, "set output 'plots/plot_%d.png'\n", iter); // Save plots to directory
+    fprintf(gnuplotPipe, "set title 'Labeled 2D Data Points: Iter = %d'\n", iter); // Title will have iter number
+    fprintf(gnuplotPipe, "set xlabel 'X'\n");
+    fprintf(gnuplotPipe, "set ylabel 'Y'\n");
+    fprintf(gnuplotPipe, "set key autotitle columnheader\n"); // Enable automatic legend titles
+
+    // Plot filled circles with palette coloring
+    fprintf(gnuplotPipe, "set cbrange [0:2]\n");
+    // Set the color palette
+    fprintf(gnuplotPipe, "set palette color model RGB defined (0 'blue', 1 'red', 2 'black')\n");
+
+    // Plot filled circles with palette coloring for the first N rows and with asterisks for the next K rows.
+    fprintf(gnuplotPipe, "plot '%s' using 1:2:3 every ::0::%d-2 with points pt 7 palette pointsize 1 title 'Data Points', \
+                    '' using 1:2:3 every ::%d-1::%d+%d-1 with points pt 3 palette pointsize 3 title 'Cluster Centers'\n", filename, N, N, N, K);
+
+    fflush(gnuplotPipe);
+    fprintf(gnuplotPipe, "exit\n");
+    pclose(gnuplotPipe);
+    free(colors);
 }
