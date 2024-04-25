@@ -3,10 +3,10 @@
 #include <string.h>
 #include <math.h>
 #include <time.h>
-#include <omp.h>
+#include <unistd.h>
+#include <mpi.h>
 
 // reference https://ieeexplore.ieee.org/document/6787289
-// data, command line
 void initializeMeans(int N, int d, int K, double X[N][d], double *meanVector,double mu[K][d]);
 void findMeanVector(int N, int d, double X[N][d], double *meanVector);
 void initializeCovariances(int N, int d, double X[N][d], int K, double *meanVector, double (*sigma)[d][d]);
@@ -17,7 +17,7 @@ void gaussJordan(int n, double matrix[n][n], double inverse[n][n]);
 double pdf(int d, double sigma_m[d][d], double mu_m[d], double x_i[d]);
 
 void EStep(int d, int K, double x_i[d], double mu[K][d], double (*sigma)[d][d], double alpha[K], double H_i[K]);
-void MStep(int N, int d, int K, double X[N][d], double H[N][K], double mu[K][d], double alpha[K], double (*sigma)[d][d]);
+void MStep(int firstIndex, int lastIndex, int N, int d, int K, double X[N][d], double H[N][K], double mu[K][d], double alpha[K], double (*sigma)[d][d]);
 void checkConvergence(int N, int K, double H[N][K], double alpha[K]);
 int* getLabels(int N, int K, double H[N][K]); // labelIndices 1xN
 // H is posterior probabuility, the output
@@ -25,32 +25,25 @@ int* getLabels(int N, int K, double H[N][K]); // labelIndices 1xN
 void printMatrix(int n, int m, double x[n][m]);
 void plotPoints(const char *filename, int N, int d, int K, double points[N][d], double H[N][K], double mu[K][d], int iter);
 
-double logLI = 0.0, logLIPrev = 0.0;
-double epsilon = 0.01;
-int maxIter = 1000, flag = 0;
+double logLIPrev = 0.0;
+double epsilon = 0.000001;
+int maxIter = 1000, flag = 0, my_rank, comm_sz;
 
-int main(int argc, char *argv[])
-{
+int main(int argc, char *argv[]){
     // 0. make data (in python)
 
     //////// 1a. initialize variables, read in file, allocate memory ////////
-    int N = 0, d = 1, K, thread_count, i, j; // initialize
-    
+    int N = 0, d = 1, K, i, j, firstIndex = 0, lastIndex = 0, quot, rem; // initialize
 
     // Read in command line inputs. csv file name, number of components, number of threads
-    // also whether they want labels 
-    // data is csv delimeted, Nxd (array length x dimension number)
-    // thread_count is number of threads
     char *fileName = argv[1]; // save pointer to command line args
     K = atoi(argv[2]);
-    thread_count = atoi(argv[3]);
 
     // Read in data from csv file, parse the dimension {d} and number of points {N} from the file.
     FILE *fp = fopen(fileName, "r");
     // https://stackoverflow.com/questions/12733105/c-function-that-counts-lines-in-file
     char ch;
-    while (!feof(fp))
-    {
+    while (!feof(fp)){
         ch = fgetc(fp);
         if (ch == '\n')
         {
@@ -59,15 +52,12 @@ int main(int argc, char *argv[])
     }
     // https://www.programiz.com/c-programming/examples/read-file
     rewind(fp);
-    while (!feof(fp))
-    {
-        if (ch == '\n')
-        {
+    while (!feof(fp)){
+        if (ch == '\n'){
             break;
         }
         ch = fgetc(fp);
-        if (ch == ',')
-        {
+        if (ch == ','){
             d++;
         }
     }
@@ -76,7 +66,6 @@ int main(int argc, char *argv[])
     // https://stackoverflow.com/questions/36890624/malloc-a-2d-array-in-c
     double(*X)[d] = malloc(sizeof(double[N][d]));
     double(*H)[K] = malloc(sizeof(double[N][K]));
-    double(*HPrev)[K] = malloc(sizeof(double[N][K]));
     double(*mu)[d] = malloc(d * sizeof(double[K][d]));
 
     double(*sigma)[d][d] = malloc(K * sizeof(double[d][d]));   // K number of matrices that are of size dxd
@@ -85,20 +74,20 @@ int main(int argc, char *argv[])
     double *meanVector = malloc(d * sizeof(double));
     double *labelIndices = malloc(N * sizeof(double));
 
+    int* ranges = malloc(comm_sz * sizeof(int));
+    int* firstIndexVec = malloc(comm_sz * sizeof(int));
+
     // https://stackoverflow.com/questions/61078280/how-to-read-a-csv-file-in-c
     rewind(fp);
     char buffer[160];
-    for (i = 0; i < N; i++)
-    {
-        if (!fgets(buffer, 160, fp))
-        {
+    for (i = 0; i < N; i++){
+        if (!fgets(buffer, 160, fp)){
             printf("Incorrect dimensions. Something is wrong.\n");
             break;
         }
         char *token;
         token = strtok(buffer, ",");
-        for (j = 0; j < d; j++)
-        {
+        for (j = 0; j < d; j++){
             double n = atof(token);
             X[i][j] = n;
 
@@ -109,53 +98,82 @@ int main(int argc, char *argv[])
     // close file
     fclose(fp);
 
-    // print debugging
-    // printMatrix(N, d, X);
+    MPI_Init(&argc , &argv);
+    MPI_Comm_rank(MPI_COMM_WORLD, &my_rank); 
+    MPI_Comm_size(MPI_COMM_WORLD, &comm_sz);
 
     //////// 1b. initialization for EM algorithm ////////
     // use random points for means
     // use whole dataset covariance to start (could add regularization matrix *number components)
     // use uniform mixing coefficients as 1/# cluster
+     if(my_rank==0){
 
-    findMeanVector(N, d, X, meanVector);  // modifies the meanVector array in place. Input to initializeMeans and initializeCovariances.
+        findMeanVector(N, d, X, meanVector);  // modifies the meanVector array in place. Input to initializeMeans and initializeCovariances.
 
-    initializeMeans(N, d, K, X, meanVector, mu);
-    // print the values of the initial means
-    printf("initial means: \n");
-    for (int i = 0; i < K; i++)
-    {
-        printf("vector_%d = [", i);
-        for (int j = 0; j < d; j++)
-        {
-            printf("%lf, ", mu[i][j]);
+        initializeMeans(N, d, K, X, meanVector, mu);
+        // print the values of the initial means
+        printf("initial means: \n");
+        for (int i = 0; i < K; i++){
+            printf("vector_%d = [", i);
+            for (int j = 0; j < d; j++)
+            {
+                printf("%lf, ", mu[i][j]);
+            }
+            printf("]\n");
         }
-        printf("]\n");
+
+        initializeCoefficients(K, alpha);
+
+        initializeCovariances(N, d, X, K, meanVector, sigma);
+
+        quot = N/comm_sz; // quotient is length of indices per processor
+        rem = N%comm_sz; // remainder is amount of processes to add an extra element to
+
+        for (int dest = 0; dest<comm_sz; dest++){
+            if (dest<rem){ // for the length of the remainder
+                lastIndex = firstIndex + quot; // last index is first index plus length of index range
+            }
+            else{ // once no more remainder
+                lastIndex = firstIndex + quot - 1; // processors should have one less element so they have roughly the same number of elements
+            }
+
+            if (dest!=0){
+                MPI_Send(&firstIndex, 1, MPI_INT, dest, 0, MPI_COMM_WORLD);
+                //index1[i] = lastIndex; 
+                MPI_Send(&lastIndex, 1, MPI_INT, dest, 0, MPI_COMM_WORLD);
+            }
+            ranges[dest] = lastIndex - firstIndex;
+            firstIndexVec[dest] = firstIndex;
+            firstIndex = lastIndex + 1; // first index always one more then previous last
+
+            if (dest!=0){
+                MPI_Send(mu, K*d, MPI_DOUBLE, dest, 0, MPI_COMM_WORLD);
+                MPI_Send(alpha, K, MPI_DOUBLE, dest, 0, MPI_COMM_WORLD);
+                MPI_Send(sigma, K*d*d, MPI_DOUBLE, dest, 0, MPI_COMM_WORLD);
+            }
+        }
+
+        int dest = 0;
+        firstIndex = 0;
+        if (dest<rem){ // for the length of the remainder
+            lastIndex = firstIndex + quot; // last index is first index plus length of index range
+        }
+        else{ // once no more remainder
+            lastIndex = firstIndex + quot - 1; // processors should have one less element so they have roughly the same number of elements
+        }
+    }
+ 
+    else if (my_rank!=0){  
+        MPI_Recv(&firstIndex, 1, MPI_INT, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+        MPI_Recv(&lastIndex, 1, MPI_INT, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+
+        MPI_Recv(mu, K*d, MPI_DOUBLE, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+        MPI_Recv(alpha, K, MPI_DOUBLE, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+        MPI_Recv(sigma, K*d*d, MPI_DOUBLE, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
     }
 
-    initializeCoefficients(K, alpha);
-    // print debugging
-    // for (int i = 0; i < K; i++){
-    //     printf("%lf\n", alpha[i]);
-    // }
-
-    initializeCovariances(N, d, X, K, meanVector, sigma);
-    // print debugging
-    /*for (int k = 0; k < K; k++){
-        printf("covariance matrix %d: \n", k);
-        for (int i = 0; i < d; i++){
-            for (int j = 0; j < d; j++){
-                printf("%.4f\t", sigma[k][i][j]);
-            }
-            printf("\n");
-        }
-        printf("\n");
-    }*/
-
-    omp_set_num_threads(thread_count);
-
     for (int iter = 1; iter <= maxIter; iter++){
-
-        if ((iter -1) % 10 == 0)
+        /*if ((iter -1) % 10 == 0)
         {
             printf("iteration %d\n", iter - 1);
             //printMatrix(N, K, H);
@@ -167,72 +185,78 @@ int main(int argc, char *argv[])
             //     printf("%lf\n", alpha[i]);
             // }
 
-        }
+        }*/
 
-        //////// 2. E-Step ////////
-    # pragma omp parallel for
-        for (int row = 0; row < N; row++){
+        //////// 2. E-Step ////////    
+        for (int row = firstIndex; row <= lastIndex; row++){
             // compute values for each row
             EStep(d, K, X[row], mu, sigma, alpha, H[row]);
         }
-        // print debugging
-        //printf("E-Step: \n");
-        //printMatrix(N, K, H);
 
-
-        // 3. M-Step
-            // compute values for each row
-        //printMatrix(K, d, mu);
-        MStep(N, d, K, X, H, mu, alpha, sigma);
-        //printMatrix(K, d, mu);
-        /*for (int k = 0; k < K; k++){
-            printf("covariance matrix %d: \n", k);
-            for (int i = 0; i < d; i++){
-                for (int j = 0; j < d; j++){
-                    printf("%.4f\t", sigma[k][i][j]);
-                }
-                printf("\n");
-            }
-            printf("\n");
-        }*/
-
-        // 4. check for convergence; iteration number and epsilon
-        if (iter == maxIter){
-            printf("Maximum iteration of %d reached. No convergence.\n", maxIter); 
-            return 0;
+        if (my_rank!=0){ 
+            MPI_Send(H[firstIndex], (lastIndex-firstIndex+1)*K, MPI_DOUBLE, 0, 0, MPI_COMM_WORLD);         
         }
-        checkConvergence(N, K, H, alpha);
-        if (flag == 1){
-        printf("Converged at iteration %d.\n", iter);
-        break;
+        else if (my_rank==0){
+            for (int dest = 1; dest < comm_sz; dest++){ 
+                MPI_Recv(H[firstIndexVec[dest]], (ranges[dest]+1)*K, MPI_DOUBLE, dest, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);   
+            }      
+        }
+
+        if (my_rank==0){ 
+            for (int dest = 1; dest < comm_sz; dest++){
+                MPI_Send(H, N*K, MPI_DOUBLE, dest, 0, MPI_COMM_WORLD);  
+            }       
+        }
+        else if (my_rank!=0){
+            MPI_Recv(H, N*K, MPI_DOUBLE, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);       
+        }
+
+        // print debugging
+        MStep(firstIndex, lastIndex, N, d, K, X, H, mu, alpha, sigma);
+
+        MPI_Barrier(MPI_COMM_WORLD);
+        if (my_rank==0){
+            //4. check for convergence; iteration number and epsilon
+            if (iter == maxIter){
+                printf("Maximum iteration of %d reached. No convergence.\n", maxIter); 
+                flag = 1;
+            }
+            checkConvergence(N, K, H, alpha);
+            for(int dest = 1; dest < comm_sz; dest++){
+                MPI_Send(&flag, 1, MPI_INT, dest, 0, MPI_COMM_WORLD);
+            }
+            if (flag == 1){
+                printf("Converged at iteration %d.\n", iter);
+                break;
+            }
+       }
+        else if(my_rank!=0){
+            MPI_Recv(&flag, 1, MPI_INT, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+            if (flag == 1){break;}
         }
     }
-
     // 5. get labels using maximum probabuility of feature vector among components (optional)
-    //void getLabels(); // index+1 of maximum of each row
-    //printMatrix(N, K, H);
-    int *labels = getLabels(N, K, H);
-
+    if(my_rank==0){
+        printMatrix(K,d,mu);
+        int *labels = getLabels(N, K, H);
+        free(labels);
+    }
     // try plotting with gnuplot
     // if (d == 2){
     //     plotPoints("plot.dat", N, d, K, X, H, mu, iter - 1);
-    // }
 
     // 6. implement timing
 
     // 7. generating graphs, output stuff
-    //# pragma omp single */
-
     // free memory
     free(alpha);
     free(mu);
     free(sigma);
     free(X);
     free(H);
-    free(HPrev);
     free(labelIndices);
     free(meanVector);
-    free(labels);
+    MPI_Finalize();
 
     return 0;
 }
@@ -247,7 +271,6 @@ void printMatrix(int n, int m, double x[n][m]){
             printf("%lf ", x[i][j]);
             sum += x[i][j];
         }
-        //if(sum < .99){printf("Something wrong.");}
         printf("\n");
     }
 }
@@ -263,8 +286,6 @@ void findMeanVector(int N, int d, double X[N][d], double *meanVector)
             sum += X[j][i];
         }
         meanVector[i] = sum / N;
-        // print debugging
-        // printf("%i: %lf \n", i, meanVector[i]);
     }
 }
 
@@ -279,8 +300,6 @@ void initializeMeans(int N, int d, int K, double X[N][d], double *meanVector,dou
         {
             double perturbation = -pert_scale + ((double)rand() / RAND_MAX) * 2 * pert_scale; // this will give random double between -pert_scale and pert_scale
             mu[i][j] = meanVector[j] + perturbation;
-            // print debugging
-            // printf("%i: %lf \n", i, mu[i][j]);
         }
     }
 }
@@ -456,58 +475,80 @@ void EStep(int d, int K, double x_i[d], double mu[K][d], double (*sigma)[d][d], 
             denominator += alpha[k] * pdf(d, sigma[k], mu[k], x_i);
         }
         H_i[m] = numerator / denominator;
-        //printf("%f %f %f %d \n", numerator, denominator, H_i[m], omp_get_thread_num ( ), m);
     }
 
 }
 
-void MStep(int N, int d, int K, double X[N][d], double H[N][K], double mu[K][d], double alpha[K], double (*sigma)[d][d]){
-    double vi, sum;
+void MStep(int firstIndex, int lastIndex, int N, int d, int K, double X[N][d], double H[N][K], double mu[K][d], double alpha[K], double (*sigma)[d][d]){
+    double vi=0.0, sum=0.0, local_wi = 0.0, local_vi, local_sum;
     double *wi = calloc(K, sizeof(double));
     // calculate sum of H over N at each k
     for (int k = 0; k < K; k++){
-        # pragma omp parallel for reduction(+: wi[k])
-            for (int i = 0; i < N; i++){
-                wi[k] += H[i][k];
-            }
+        local_wi = 0.0;
+        for (int i = firstIndex; i <= lastIndex; i++){
+            local_wi += H[i][k];
+        }
+        MPI_Reduce(&local_wi, &wi[k], 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
     }
     for (int k = 0; k < K; k++){
         for (int j = 0; j < d; j++){
             // calculate sum of H*x over N at each k
-            vi = 0.0;
-            # pragma omp parallel for reduction(+: vi)
-            for (int i = 0; i < N; i++){
-                vi += H[i][k]*X[i][j];
+            local_vi = 0.0;
+            for (int i = firstIndex; i <= lastIndex; i++){
+                local_vi += H[i][k]*X[i][j];
             }
-            mu[k][j] = vi/wi[k]; // update mu at each k and d
+            MPI_Reduce(&local_vi, &vi, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+            if (my_rank==0){mu[k][j] = vi/wi[k];} // update mu at each k and d
         }
-        alpha[k] = (1.0/(double) N)*wi[k]; // update alpha
+        if (my_rank==0){alpha[k] = (1.0/(double) N)*wi[k];} // update alpha
+    }
+
+    if (my_rank==0){  
+        for(int dest = 1; dest < comm_sz; dest++){
+            MPI_Send(mu, K*d, MPI_DOUBLE, dest, 0, MPI_COMM_WORLD);
+            MPI_Send(alpha, K, MPI_DOUBLE, dest, 0, MPI_COMM_WORLD);
+            MPI_Send(wi, K, MPI_DOUBLE, dest, 0, MPI_COMM_WORLD);
+        }
+    }
+    else if (my_rank!=0){  
+        MPI_Recv(mu, K*d, MPI_DOUBLE, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+        MPI_Recv(alpha, K, MPI_DOUBLE, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+        MPI_Recv(wi, K, MPI_DOUBLE, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
     }
 
     for (int k = 0; k < K; k++){
         for (int j0 = 0; j0 < d; j0++){
             for (int j1 = 0; j1 < d; j1++){
-                sum = 0.0;
-                # pragma omp parallel for reduction(+: sum)
-                for (int i = 0; i < N; i++){
-                    sum += H[i][k] * (X[i][j0] - mu[k][j0]) * (X[i][j1] - mu[k][j1]);
+                local_sum = 0.0;
+                for (int i = firstIndex; i <= lastIndex; i++){
+                    local_sum += H[i][k] * (X[i][j0] - mu[k][j0]) * (X[i][j1] - mu[k][j1]); // all threads need to know H
                 }
-                sigma[k][j0][j1] = sum/wi[k];
+                MPI_Reduce(&local_sum, &sum, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+                if (my_rank==0){sigma[k][j0][j1] = sum/wi[k];}
             }
         }
+    }
+    if (my_rank==0){  
+        for(int dest = 1; dest < comm_sz; dest++){
+            MPI_Send(sigma, K*d*d, MPI_DOUBLE, dest, 0, MPI_COMM_WORLD);
+        }
+    }
+    else if (my_rank!=0){  
+        MPI_Recv(sigma, K*d*d, MPI_DOUBLE, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
     }
     free(wi);
 }
 
 void checkConvergence(int N, int K, double H[N][K], double alpha[K]){
     double *LI = calloc(N, sizeof(double));
+    double logLI = 0.0;
     for (int i = 0; i < N; i++){
         for (int k = 0; k < K; k++){
             LI[i] += alpha[k]*H[i][k]; // get likelihood at each N
         }
         logLI += log(LI[i]); // take log-likelihood of array
     }
-    if ((logLI - logLIPrev)/logLI < epsilon){ // check convergence
+    if (fabs((logLI - logLIPrev)/logLI) < epsilon){ // check convergence
         printf("It converged with log-likelihood %f.\n", logLI);
         flag = 1; // if true tell main
     }
@@ -517,7 +558,7 @@ void checkConvergence(int N, int K, double H[N][K], double alpha[K]){
 int* getLabels(int N, int K, double H[N][K]){
     int *labelIndices = calloc(N, sizeof(int));
     FILE *fpo;
-    fpo = fopen("labels.txt", "w");
+    fpo = fopen("labelsMPI.txt", "w");
     for (int i = 0; i < N; i++){
         int maxIndex = 0;
         double maxVal = H[i][0];
