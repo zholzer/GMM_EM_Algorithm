@@ -25,8 +25,8 @@ int* getLabels(int N, int K, double H[N][K]); // labelIndices 1xN
 void printMatrix(int n, int m, double x[n][m]);
 void plotPoints(const char *filename, int N, int d, int K, double points[N][d], double H[N][K], double mu[K][d], int iter);
 
-double logLI = 0.0, logLIPrev = 0.0;
-double epsilon = 0.01;
+double logLIPrev = 0.0;
+double epsilon = 0.000001;
 int maxIter = 1000, flag = 0;
 
 int main(int argc, char *argv[])
@@ -109,9 +109,6 @@ int main(int argc, char *argv[])
     // close file
     fclose(fp);
 
-    // print debugging
-    // printMatrix(N, d, X);
-
     //////// 1b. initialization for EM algorithm ////////
     // use random points for means
     // use whole dataset covariance to start (could add regularization matrix *number components)
@@ -155,8 +152,7 @@ int main(int argc, char *argv[])
 
     for (int iter = 1; iter <= maxIter; iter++){
 
-        if ((iter -1) % 10 == 0)
-        {
+        /*if ((iter -1) % 10 == 0){
             printf("iteration %d\n", iter - 1);
             //printMatrix(N, K, H);
             // printf("mu matrix:\n");
@@ -167,7 +163,7 @@ int main(int argc, char *argv[])
             //     printf("%lf\n", alpha[i]);
             // }
 
-        }
+        }*/
 
         //////// 2. E-Step ////////
     # pragma omp parallel for
@@ -176,25 +172,10 @@ int main(int argc, char *argv[])
             EStep(d, K, X[row], mu, sigma, alpha, H[row]);
         }
         // print debugging
-        //printf("E-Step: \n");
-        //printMatrix(N, K, H);
-
 
         // 3. M-Step
             // compute values for each row
-        //printMatrix(K, d, mu);
         MStep(N, d, K, X, H, mu, alpha, sigma);
-        //printMatrix(K, d, mu);
-        /*for (int k = 0; k < K; k++){
-            printf("covariance matrix %d: \n", k);
-            for (int i = 0; i < d; i++){
-                for (int j = 0; j < d; j++){
-                    printf("%.4f\t", sigma[k][i][j]);
-                }
-                printf("\n");
-            }
-            printf("\n");
-        }*/
 
         // 4. check for convergence; iteration number and epsilon
         if (iter == maxIter){
@@ -209,8 +190,7 @@ int main(int argc, char *argv[])
     }
 
     // 5. get labels using maximum probabuility of feature vector among components (optional)
-    //void getLabels(); // index+1 of maximum of each row
-    //printMatrix(N, K, H);
+    printMatrix(K, d, mu);
     int *labels = getLabels(N, K, H);
 
     // try plotting with gnuplot
@@ -456,7 +436,6 @@ void EStep(int d, int K, double x_i[d], double mu[K][d], double (*sigma)[d][d], 
             denominator += alpha[k] * pdf(d, sigma[k], mu[k], x_i);
         }
         H_i[m] = numerator / denominator;
-        //printf("%f %f %f %d \n", numerator, denominator, H_i[m], omp_get_thread_num ( ), m);
     }
 
 }
@@ -501,13 +480,14 @@ void MStep(int N, int d, int K, double X[N][d], double H[N][K], double mu[K][d],
 
 void checkConvergence(int N, int K, double H[N][K], double alpha[K]){
     double *LI = calloc(N, sizeof(double));
+    double logLI = 0.0; 
     for (int i = 0; i < N; i++){
         for (int k = 0; k < K; k++){
             LI[i] += alpha[k]*H[i][k]; // get likelihood at each N
         }
         logLI += log(LI[i]); // take log-likelihood of array
     }
-    if ((logLI - logLIPrev)/logLI < epsilon){ // check convergence
+    if (fabs((logLI - logLIPrev)/logLI) < epsilon){ // check convergence
         printf("It converged with log-likelihood %f.\n", logLI);
         flag = 1; // if true tell main
     }
@@ -517,7 +497,7 @@ void checkConvergence(int N, int K, double H[N][K], double alpha[K]){
 int* getLabels(int N, int K, double H[N][K]){
     int *labelIndices = calloc(N, sizeof(int));
     FILE *fpo;
-    fpo = fopen("labels.txt", "w");
+    fpo = fopen("labelsOpenMP.txt", "w");
     for (int i = 0; i < N; i++){
         int maxIndex = 0;
         double maxVal = H[i][0];
@@ -533,7 +513,7 @@ int* getLabels(int N, int K, double H[N][K]){
     return labelIndices; // output the array
 }
 
-void plotPoints(const char *filename, int N, int d, int K, double points[N][d], double H[N][K], double mu[K][d], int iter) {
+/*void plotPoints(const char *filename, int N, int d, int K, double points[N][d], double H[N][K], double mu[K][d], int iter) {
     FILE *fp = fopen(filename, "w");
     if (fp == NULL) {
         perror("Error opening file");
@@ -594,4 +574,4 @@ void plotPoints(const char *filename, int N, int d, int K, double points[N][d], 
     fprintf(gnuplotPipe, "exit\n");
     pclose(gnuplotPipe);
     free(colors);
-}
+}*/
