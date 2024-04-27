@@ -25,13 +25,17 @@ int* getLabels(int N, int K, double H[N][K]); // labelIndices 1xN
 void printMatrix(int n, int m, double x[n][m]);
 void plotPoints(const char *filename, int N, int d, int K, double points[N][d], double H[N][K], double mu[K][d], int iter);
 
-double logLIPrev = 0.0;
-double epsilon = 0.000001;
+double logLIPrev;
+double epsilon = 0.00000001;
 int maxIter = 1000, flag = 0, my_rank, comm_sz;
 
 int main(int argc, char *argv[]){
     // 0. make data (in python)
-
+    double totalTime = 0.0;
+    MPI_Init(&argc , &argv);
+    MPI_Comm_rank(MPI_COMM_WORLD, &my_rank); 
+    MPI_Comm_size(MPI_COMM_WORLD, &comm_sz);
+    double localStartTime = MPI_Wtime();
     //////// 1a. initialize variables, read in file, allocate memory ////////
     int N = 0, d = 1, K, i, j, firstIndex = 0, lastIndex = 0, quot, rem; // initialize
 
@@ -97,10 +101,6 @@ int main(int argc, char *argv[]){
 
     // close file
     fclose(fp);
-
-    MPI_Init(&argc , &argv);
-    MPI_Comm_rank(MPI_COMM_WORLD, &my_rank); 
-    MPI_Comm_size(MPI_COMM_WORLD, &comm_sz);
 
     //////// 1b. initialization for EM algorithm ////////
     // use random points for means
@@ -246,6 +246,13 @@ int main(int argc, char *argv[]){
     //     plotPoints("plot.dat", N, d, K, X, H, mu, iter - 1);
 
     // 6. implement timing
+    double localEndTime  = MPI_Wtime(); // get ending time
+    double localTime = localEndTime - localStartTime; // get total time
+    MPI_Reduce(&localTime, &totalTime , 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD); // get the maximum
+    if (my_rank==0){
+        printf("Time is:\n");
+        printf("%f", totalTime); // send total time to bash
+    }
 
     // 7. generating graphs, output stuff
     // free memory
@@ -260,6 +267,8 @@ int main(int argc, char *argv[]){
 
     return 0;
 }
+
+/// END OF MAIN
 
 void printMatrix(int n, int m, double x[n][m]){
     double sum;
@@ -293,7 +302,7 @@ void findMeanVector(int N, int d, double X[N][d], double *meanVector)
 void initializeMeans(int N, int d, int K, double X[N][d], double *meanVector,double mu[K][d]){
     // add small perturbations about the mean vector
     srand(time(NULL));
-    double pert_scale = 0.1 * meanVector[0]; // set the scale of the perturbations to be 10% of the first element of the mean vector
+    double pert_scale = 0.5 * meanVector[0]; // set the scale of the perturbations to be 10% of the first element of the mean vector
     for (int i = 0; i < K; i++)
     {
         for (int j = 0; j < d; j++)
