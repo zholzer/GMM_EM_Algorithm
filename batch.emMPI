@@ -2,13 +2,13 @@
 ## PBS batch directives:
 #PBS -V
 #PBS -l nodes=2:ppn=16:mpi     # this will request 1 node and the max 16 processors. 2 nodes not working currently.
-#PBS -N EM
+#PBS -N emMPI
 #PBS -j oe
-#PBS -o out.txt
+#PBS -o outMPI.txt
 #PBS -q batch
 
 cd $PBS_O_WORKDIR
-echo "batch.em: running MonteCarlo test..."
+echo "batch.emMPI: running MonteCarlo test..."
 echo "application output follows..."
 
 export OMPI_MCA_btl=^openib
@@ -26,7 +26,7 @@ do
     echo "data_$n.csv"
     for process in "${processNum[@]}"
     do
-        t=$(mpirun --oversubscribe -np $process ./gmm_em_mpi dataShort.csv 5 | tail -n 1)
+        t=$(mpirun --oversubscribe -np $process ./gmm_em_mpi data_$n.csv 5 | tail -n 1)
         if [ "$process" -eq 1 ]; then
             serialT=$t
             echo "serial time = $t "
