@@ -33,9 +33,11 @@ double logLIPrev = 0.0;
 double epsilon = 0.000001;
 int maxIter = 1000, flag = 0;
 
-int main(int argc, char *argv[])
-{
+int main(int argc, char *argv[]){
     // 0. make data (in python)
+    double totalTime = 0.0;
+    clock_t startTime, endTime;
+    startTime = clock();
 
     //////// 1a. initialize variables, read in file, allocate memory ////////
     int N = 0, d = 1, K, thread_count, i, j; // initialize
@@ -154,6 +156,7 @@ int main(int argc, char *argv[])
     }*/
 
     omp_set_num_threads(thread_count);
+    omp_set_schedule(omp_sched_guided, 0); // guided best at large size
 
     for (int iter = 1; iter <= maxIter; iter++){
 
@@ -204,12 +207,12 @@ int main(int argc, char *argv[])
     // }
 
     // 6. implement timing
+    endTime = clock();
+    totalTime = ((double) (endTime - startTime)) / CLOCKS_PER_SEC;
+    printf("Time is:\n");
+    printf("%f", totalTime);
 
-    // 7. generating graphs, output stuff
-    //# pragma omp single */
-
-    // free memory
-    free(alpha);
+    free(alpha); // free memory
     free(mu);
     free(sigma);
     free(X);
