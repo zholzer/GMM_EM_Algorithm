@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <float.h>
 #include <math.h>
 #include <time.h>
 #include <unistd.h>
@@ -11,6 +12,9 @@ void initializeMeans(int N, int d, int K, double X[N][d], double *meanVector,dou
 void findMeanVector(int N, int d, double X[N][d], double *meanVector);
 void initializeCovariances(int N, int d, double X[N][d], int K, double *meanVector, double (*sigma)[d][d]);
 void initializeCoefficients(int K, double *alpha);
+
+double computeDistanceSquared(double *v1, double *v2, int d);
+void initializeMeansKMeansPlusPlus(int N, int d, int K, double X[N][d], double mu[K][d]);
 
 double find_determinant(int n, double sigma_m[n][n]);
 void gaussJordan(int n, double matrix[n][n], double inverse[n][n]);
@@ -110,7 +114,8 @@ int main(int argc, char *argv[]){
 
         findMeanVector(N, d, X, meanVector);  // modifies the meanVector array in place. Input to initializeMeans and initializeCovariances.
 
-        initializeMeans(N, d, K, X, meanVector, mu);
+        //initializeMeans(N, d, K, X, meanVector, mu);
+        initializeMeansKMeansPlusPlus(N, d, K, X, mu);
         // print the values of the initial means
         printf("initial means: \n");
         for (int i = 0; i < K; i++){
@@ -139,7 +144,6 @@ int main(int argc, char *argv[]){
 
             if (dest!=0){
                 MPI_Send(&firstIndex, 1, MPI_INT, dest, 0, MPI_COMM_WORLD);
-                //index1[i] = lastIndex; 
                 MPI_Send(&lastIndex, 1, MPI_INT, dest, 0, MPI_COMM_WORLD);
             }
             ranges[dest] = lastIndex - firstIndex;
@@ -311,6 +315,61 @@ void initializeMeans(int N, int d, int K, double X[N][d], double *meanVector,dou
             mu[i][j] = meanVector[j] + perturbation;
         }
     }
+}
+
+// Function to compute the squared Euclidean distance between two vectors
+double computeDistanceSquared(double *v1, double *v2, int d) {
+    double distanceSquared = 0;
+    for (int i = 0; i < d; i++) {
+        double diff = v1[i] - v2[i];
+        distanceSquared += diff * diff;
+    }
+    return distanceSquared;
+}
+
+// Function to initialize means using K-means++ method
+void initializeMeansKMeansPlusPlus(int N, int d, int K, double X[N][d], double mu[K][d]) {
+    // Choose the first centroid randomly
+    int firstCentroidIndex = rand() % N;
+    for (int i = 0; i < d; i++) {
+        mu[0][i] = X[firstCentroidIndex][i];
+    }
+
+    // Initialize array to store distances to nearest centroids
+    double *nearestDistances = (double *)malloc(N * sizeof(double));
+
+    // Loop to select the rest of the centroids
+    for (int k = 1; k < K; k++) {
+        double totalDistance = 0.0;
+
+        // Compute distances to nearest centroids for each point
+        for (int n = 0; n < N; n++) {
+            double minDistanceSquared = DBL_MAX;
+            for (int j = 0; j < k; j++) {
+                double distanceSquared = computeDistanceSquared(X[n], mu[j], d);
+                minDistanceSquared = fmin(minDistanceSquared, distanceSquared);
+            }
+            nearestDistances[n] = minDistanceSquared;
+            totalDistance += minDistanceSquared;
+        }
+
+        // Choose the next centroid with probability proportional to square distance
+        double threshold = ((double)rand() / RAND_MAX) * totalDistance;
+        double sum = 0.0;
+        int nextCentroidIndex = 0;
+        while (sum <= threshold && nextCentroidIndex < N) {
+            sum += nearestDistances[nextCentroidIndex];
+            nextCentroidIndex++;
+        }
+        nextCentroidIndex--;
+
+        // Set the next centroid
+        for (int i = 0; i < d; i++) {
+            mu[k][i] = X[nextCentroidIndex][i];
+        }
+    }
+
+    free(nearestDistances);
 }
 
 void initializeCoefficients(int K, double *alpha)
