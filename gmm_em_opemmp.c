@@ -12,7 +12,7 @@ void MStepOMP(int N, int d, int K, double X[N][d], double H[N][K], double mu[K][
 int main(int argc, char *argv[]){
     // 0. make data (in python)
     double totalTime = 0.0, startTime, endTime;
-    startTime = omp_get_wtime();
+    startTime = omp_get_wtime(); // start timing
 
     //////// 1a. initialize variables, read in file, allocate memory ////////
     int N = 0, d = 1, K, thread_count, i, j, maxIter = 100; // initialize
@@ -156,10 +156,10 @@ int main(int argc, char *argv[]){
     // } // for plotting
 
     // 6. implement timing
-    endTime = omp_get_wtime();
+    endTime = omp_get_wtime(); // end timing
     totalTime = endTime - startTime;
     printf("Time is:\n");
-    printf("%f", totalTime);
+    printf("%f", totalTime); // output to bash
     printf("\n");
 
     free(alpha); // free memory
