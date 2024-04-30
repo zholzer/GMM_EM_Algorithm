@@ -11,7 +11,7 @@ cd $PBS_O_WORKDIR
 
 echo "batch.em: running EM test on the OpenMP program with data_2.csv..."
 
-./gmm_em_openmp data_2.csv 5 8 # shows results of smallest dataset
+./bin/gmm_em_openmp data/data_2.csv 5 8 # shows results of smallest dataset
 
 n_num=(2 3 4 5 6)
 processNum=(1 2 4 8 16 32)  # script to calculate speedup/efficiencies 
@@ -22,7 +22,7 @@ do
     echo "data_$n.csv"
     for process in "${processNum[@]}"
     do
-        t=$(./gmm_em_openmp data_$n.csv 5 $process | tail -n 1)
+        t=$(./bin/gmm_em_openmp data/data_$n.csv 5 $process | tail -n 1)
         if [ "$process" -eq 1 ]; then
             serialT=$t
             echo "serial time = $t "
@@ -39,7 +39,7 @@ echo "batch.em: running EM test on the MPI program with data_2.csv..." # repeat 
 
 export OMPI_MCA_btl=^openib
 
-mpirun --oversubscribe -np 8 ./gmm_em_mpi data_2.csv 5
+mpirun --oversubscribe -np 8 ./bin/gmm_em_mpi data/data_2.csv 5
 
 n_num=(2 3 4 5 6)
 processNum=(1 2 4 8 16 32)  # script to calculate speedup/efficiencies 
@@ -50,7 +50,7 @@ do
     echo "data_$n.csv"
     for process in "${processNum[@]}"
     do
-        t=$(mpirun --oversubscribe -np $process ./gmm_em_mpi data_$n.csv 5 | tail -n 1)
+        t=$(mpirun --oversubscribe -np $process ./bin/gmm_em_mpi data/data_$n.csv 5 | tail -n 1)
         if [ "$process" -eq 1 ]; then
             serialT=$t
             echo "serial time = $t "
