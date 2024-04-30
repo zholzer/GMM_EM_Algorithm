@@ -11,7 +11,7 @@ cd $PBS_O_WORKDIR
 
 echo "batch.em: running EM test on the OpenMP program with data_2.csv..."
 
-./gmm_em_openmp data_2.csv 5 8
+./gmm_em_openmp data_2.csv 5 8 # shows results of smallest dataset
 
 n_num=(2 3 4 5 6)
 processNum=(1 2 4 8 16 32)  # script to calculate speedup/efficiencies 
@@ -35,7 +35,7 @@ do
 done
 
 echo -e ""
-echo "batch.em: running EM test on the MPI program with data_2.csv..."
+echo "batch.em: running EM test on the MPI program with data_2.csv..." # repeat with MPI
 
 export OMPI_MCA_btl=^openib
 
