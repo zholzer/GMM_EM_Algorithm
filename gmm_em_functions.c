@@ -6,7 +6,8 @@
 #include <time.h>
 #include "gmm_em.h"
 
-void printMatrix(int n, int m, double x[n][m]){
+// prints any matrix (for debugging)
+void printMatrix(int n, int m, double x[n][m]){ 
     double sum;
     for (int i = 0; i < n; i++){
         sum = 0.0;
@@ -34,7 +35,7 @@ void findMeanVector(int N, int d, double X[N][d], double *meanVector)
     }
 }
 
-// initialize means by small perturbations about the mean vector
+// initialize means by small perturbations about the mean vector, ended up using k_means++
 void initializeMeans(int N, int d, int K, double X[N][d], double *meanVector,double mu[K][d]){
     // add small perturbations about the mean vector
     srand(time(NULL));
@@ -89,14 +90,14 @@ void initializeMeansKMeansPlusPlus(int N, int d, int K, double X[N][d], double m
         double threshold = ((double)rand() / RAND_MAX) * totalDistance;
         double sum = 0.0;
         int nextCentroidIndex = 0;
-        while (sum <= threshold && nextCentroidIndex < N) {
+        while (sum <= threshold && nextCentroidIndex < N){
             sum += nearestDistances[nextCentroidIndex];
             nextCentroidIndex++;
         }
         nextCentroidIndex--;
 
         // Set the next centroid
-        for (int i = 0; i < d; i++) {
+        for (int i = 0; i < d; i++){
             mu[k][i] = X[nextCentroidIndex][i];
         }
     }
@@ -104,39 +105,33 @@ void initializeMeansKMeansPlusPlus(int N, int d, int K, double X[N][d], double m
     free(nearestDistances);
 }
 
-void initializeCoefficients(int K, double *alpha)
-{
+// initialize alpha uniformly
+void initializeCoefficients(int K, double *alpha){
     double value = 1.0 / K; // the initial values of the coefficients will be uniform and add up to 1
 
-    for (int i = 0; i < K; i++)
-    {
+    for (int i = 0; i < K; i++){
         alpha[i] = value;
     }
 }
 
-void initializeCovariances(int N, int d, double X[N][d], int K, double *meanVector, double (*sigma)[d][d])
-{
+// initialize sigma to global covarience
+void initializeCovariances(int N, int d, double X[N][d], int K, double *meanVector, double (*sigma)[d][d]){
     // initialize the covariance matrix
     double cov_matrix[d][d];
     // fill in the diagonals with the variances
-    for (int dim = 0; dim < d; dim++)
-    {
+    for (int dim = 0; dim < d; dim++){
         double sum_sq_diff = 0; // initialize sum of squared differences outside of loop
-        for (int j = 0; j < N; j++)
-        {
+        for (int j = 0; j < N; j++){
             sum_sq_diff += (X[j][dim] - meanVector[dim]) * (X[j][dim] - meanVector[dim]);
         }
         cov_matrix[dim][dim] = sum_sq_diff / ((double) N-1.0);
     }
 
     // fill in the off-diagonals with the covariances
-    for (int i = 0; i < d; i++)
-    {
-        for (int j = i + 1; j < d; j++)
-        {
+    for (int i = 0; i < d; i++){
+        for (int j = i + 1; j < d; j++){
             double sum_product = 0;
-            for (int k = 0; k < N; k++)
-            {
+            for (int k = 0; k < N; k++){
                 sum_product += (X[k][i] - meanVector[i]) * (X[k][j] - meanVector[j]);
             }
             // fill in the upper and lower triangle with the covariance
@@ -156,8 +151,7 @@ void initializeCovariances(int N, int d, double X[N][d], int K, double *meanVect
 
 }
 
-// I need some sub-functions to call for the PDF function, which is itself needed for the E-step.
-// Includes: determinant of a matrix, inverse of a matrix
+// Need some sub-functions to call for the PDF function, which is itself needed for the E-step. Includes: determinant of a matrix, inverse of a matrix
 
 // function to calculate determinant of a matrix of size d x d
 // modified from https://stackoverflow.com/questions/41384020/c-program-to-calculate-the-determinant-of-a-nxn-matrix
@@ -186,6 +180,7 @@ double find_determinant(int n, double sigma_m[n][n]) {
     return det;
 }
 
+// calculates the matrix inverse
 void gaussJordan(int n, double matrix[n][n], double inverse[n][n]) {
     double temp;
     double identity[n][n], tempMatrix[n][n];
@@ -229,6 +224,7 @@ void gaussJordan(int n, double matrix[n][n], double inverse[n][n]) {
     }
 }
 
+// probabuility density function of normal distribution
 double pdf(int d, double sigma_m[d][d], double mu_m[d], double x_i[d]) {
     double det = find_determinant(d, sigma_m);
     double part_1 = 1.0 / ( pow(2.0 * M_PI, d / 2.0) * sqrt(det));
@@ -277,6 +273,7 @@ void EStep(int d, int K, double x_i[d], double mu[K][d], double (*sigma)[d][d], 
 
 }
 
+// checks convergence of the algorithm
 double checkConvergence(double *flag, double *logLIPrev, int N, int K, double H[N][K], double alpha[K]){
     double *LI = calloc(N, sizeof(double));
     double logLI = 0.0, epsilon = 0.000001;
@@ -294,6 +291,7 @@ double checkConvergence(double *flag, double *logLIPrev, int N, int K, double H[
     else{*logLIPrev = logLI; return *logLIPrev;} // if false prev value is updated
 }
 
+// prints the labels to a file labelsMPI.txt
 int* getLabels(int N, int K, double H[N][K]){
     int *labelIndices = calloc(N, sizeof(int));
     FILE *fpo;
@@ -313,6 +311,7 @@ int* getLabels(int N, int K, double H[N][K]){
     return labelIndices; // output the array
 }
 
+// plots points if GNUplot package is installed
 void plotPoints(const char *filename, int N, int d, int K, double points[N][d], double H[N][K], double mu[K][d], int iter) {
     FILE *fp = fopen(filename, "w");
     if (fp == NULL) {
