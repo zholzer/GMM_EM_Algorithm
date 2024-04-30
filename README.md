@@ -1,5 +1,9 @@
 # GMM_EM_Algorithm
 Parallel implementation of the Expectation-Maximization Algorithm for the Gaussian Mixture Model in C
+
+Taught by Professor Miguel Dumett for COMP 605 at SDSU
+Implemented by Christine Cho and Zoe Holzer
+
 In this project, we parallelize the Expectation-Maximization Algorithm for Gaussian Mixture Models in C using OpenMP and MPI. We use similar implementations and then compare the timing of the two with simulated datasets with varying array lengths and levels of noise.
 
 In holzer/EMAlgorithm, everything is pre-compiled and executed. To replicate, do the following:
