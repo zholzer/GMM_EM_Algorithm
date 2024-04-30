@@ -244,6 +244,7 @@ int main(int argc, char *argv[]){
     return 0;
 }
 
+// calculates the MStep with MPI, ouputs updated parameters
 void MStepMPI(int firstIndex, int lastIndex, int N, int d, int K, double X[N][d], double H[N][K], double mu[K][d], double alpha[K], double (*sigma)[d][d]){
     double vi=0.0, sum=0.0, local_wi = 0.0, local_vi, local_sum;
     double *wi = calloc(K, sizeof(double));
