@@ -175,6 +175,7 @@ int main(int argc, char *argv[]){
     return 0;
 }
 
+// calulates the MStep with openMP
 void MStepOMP(int N, int d, int K, double X[N][d], double H[N][K], double mu[K][d], double alpha[K], double (*sigma)[d][d]){
     double vi, sum;
     double *wi = calloc(K, sizeof(double));
