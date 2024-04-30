@@ -295,7 +295,7 @@ double checkConvergence(double *flag, double *logLIPrev, int N, int K, double H[
 int* getLabels(int N, int K, double H[N][K]){
     int *labelIndices = calloc(N, sizeof(int));
     FILE *fpo;
-    fpo = fopen("labelsMPI.txt", "w");
+    fpo = fopen("labels.txt", "w");
     for (int i = 0; i < N; i++){
         int maxIndex = 0;
         double maxVal = H[i][0];
