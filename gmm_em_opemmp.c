@@ -84,19 +84,16 @@ int main(int argc, char *argv[]){
             token = strtok(NULL, ",");
         }
     }
-
-    // close file
-    fclose(fp);
+    fclose(fp); // close file
 
     //////// 1b. initialization for EM algorithm ////////
     // use k_means++ for means
-    // use whole dataset covariance to start (could add regularization matrix *number components)
+    // use whole dataset covariance to start
     // use uniform mixing coefficients as 1/# cluster
     findMeanVector(N, d, X, meanVector);  // modifies the meanVector array in place. Input to initializeMeans and initializeCovariances.
 
     initializeMeansKMeansPlusPlus(N, d, K, X, mu);
-    // print the values of the initial means
-    printf("initial means: \n");
+    printf("initial means: \n"); // print the values of the initial means
     for (int i = 0; i < K; i++)
     {
         printf("vector_%d = [", i);
@@ -130,8 +127,7 @@ int main(int argc, char *argv[]){
 
         //////// 2. E-Step ////////
     # pragma omp parallel for
-        for (int row = 0; row < N; row++){
-            // compute values for each row
+        for (int row = 0; row < N; row++){ // compute values for each row
             EStep(d, K, X[row], mu, sigma, alpha, H[row]);
         }
 
@@ -182,14 +178,13 @@ int main(int argc, char *argv[]){
 void MStepOMP(int N, int d, int K, double X[N][d], double H[N][K], double mu[K][d], double alpha[K], double (*sigma)[d][d]){
     double vi, sum;
     double *wi = calloc(K, sizeof(double));
-    // calculate sum of H over N at each k
-    for (int k = 0; k < K; k++){
+
+    for (int k = 0; k < K; k++){ // calculate sum of H over N at each k
     # pragma omp parallel for reduction(+: wi[k])
         for (int i = 0; i < N; i++){
             wi[k] += H[i][k];
         }
-        for (int j = 0; j < d; j++){
-            // calculate sum of H*x over N at each k
+        for (int j = 0; j < d; j++){ // calculate sum of H*x over N at each k
             vi = 0.0;
             # pragma omp parallel for reduction(+: vi)
             for (int i = 0; i < N; i++){
@@ -212,5 +207,6 @@ void MStepOMP(int N, int d, int K, double X[N][d], double H[N][K], double mu[K][
             }
         }
     }
+
     free(wi);
 }
